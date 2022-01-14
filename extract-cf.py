@@ -53,7 +53,9 @@ def extract_problem_data():
     assert(data['status'] == 'OK')
     data = data['result']
 
-    contest_name = data['contest']['name']
+    contest_details = data['contest']
+    length = data['contest']['durationSeconds']
+    contest_details['length'] = '%02d:%02d:%02d' % (length//3600, (length/60)%60, length%60)
 
     problems = [] # list of (problem_code, problem_name)
     problem_ids = dict() # problem_code -> index+1
@@ -63,10 +65,10 @@ def extract_problem_data():
         problems.append((code, name))
         problem_ids[code] = len(problems)
 
-    return (contest_name, problems, problem_ids)
+    return (contest_details, problems, problem_ids)
 
 # GLOBAL
-contest_name, problems, problem_ids = extract_problem_data()
+contest_details, problems, problem_ids = extract_problem_data()
 
 ##############################################################################
 ### Extract CF contest status                                             ####
@@ -125,11 +127,17 @@ def extract_team_list():
     ### teams :: teamId -> (teamName, members)
     teams = dict()
 
-    for i, sub in enumerate(raw_submissions):
+    individuals = dict()
+
+    for sub in raw_submissions:
         author = sub['author']
         members = list(map(lambda u: u['handle'], author['members']))
 
         if 'teamId' not in author:
+            if members[0] not in individuals:
+                i = len(individuals)
+                individuals[members[0]] = i
+            i = individuals[members[0]]
             author['teamId'] = 10**6 + i
             author['teamName'] = members[0]
 
@@ -158,12 +166,12 @@ def xadd(parent, child_name, child_text = None):
 ### Info
 contest_info = xadd(contest_feed, 'info')
 xadd(contest_info, 'contest-id', '100')
-xadd(contest_info, 'length', '05:00:00')
+xadd(contest_info, 'length', contest_details['length'])
 xadd(contest_info, 'scoreboard-freeze-length', '01:00:00')
 xadd(contest_info, 'penalty', '20')
 xadd(contest_info, 'started', 'True')
-xadd(contest_info, 'starttime', 'undefined')
-xadd(contest_info, 'title', contest_name)
+xadd(contest_info, 'starttime', contest_details['startTimeSeconds'])
+xadd(contest_info, 'title', contest_details['name'])
 xadd(contest_info, 'short-title', 'contest')
 
 ### Add only one language, and extract everything to that
@@ -217,7 +225,7 @@ for sub in raw_submissions:
     xadd(s, 'id', sub['id'])
     xadd(s, 'team', sub['author']['teamId'])
     xadd(s, 'judged', True)
-    xadd(s, 'C++', True)
+    xadd(s, 'language', 'C++')
     xadd(s, 'problem', problem_ids[sub['problem']['index']])
 
     verdict = 'OK' if sub['verdict'] == 'OK' else 'WRONG'
@@ -242,3 +250,5 @@ xadd(finalized, 'last-bronze', gold + silver + bronze)
 
 ET.indent(contest_feed)
 ET.ElementTree(contest_feed).write(output_file)
+
+print(f'Contest {config.contest_id} feed generated! Wrote to {output_file}')
