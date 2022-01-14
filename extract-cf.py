@@ -10,7 +10,7 @@ import config
 from cfapi import APICall
 
 if len(sys.argv) < 4:
-    print(f'Usage: python3 {sys.argv[0]} <status.json> <standings.json> <output.xml>')
+    print(f'Usage: python3 {sys.argv[0]} <status>.json <standings>.json <output>.xml')
     sys.exit(1)
 
 # GLOBAL
@@ -172,7 +172,7 @@ xadd(contest_info, 'penalty', '20')
 xadd(contest_info, 'started', 'True')
 xadd(contest_info, 'starttime', contest_details['startTimeSeconds'])
 xadd(contest_info, 'title', contest_details['name'])
-xadd(contest_info, 'short-title', 'contest')
+xadd(contest_info, 'short-title', contest_details['name'])
 
 ### Add only one language, and extract everything to that
 lang = xadd(contest_feed, 'language')
@@ -209,9 +209,10 @@ for teamId, teamData in teams.items():
     xadd(t, 'nationality', 'India')
     xadd(t, 'university', 'IIIT Hyderabad')
     xadd(t, 'university-short-name', 'IIITH')
-    xadd(t, 'region', config.regions[0])
+    # xadd(t, 'region', config.regions[0])
 
     ### TODO: figure out where to add member info
+    # xadd(t, 'display_name', teamName + ' (' + ', '.join(members) + ')')
 
 ### Submission data:
 submission_ignore_count = 0
