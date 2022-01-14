@@ -1,0 +1,4 @@
+config.py
+*.json
+*.xml
+__pycache__

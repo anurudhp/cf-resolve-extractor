@@ -1,0 +1,2 @@
+api_key = 'YOUR CF API KEY HERE'
+secret = 'YOUR CF API SECRET KEY'
