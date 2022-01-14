@@ -2,3 +2,5 @@ config.py
 *.json
 *.xml
 __pycache__
+*.bak
+logs
