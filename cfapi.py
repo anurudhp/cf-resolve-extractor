@@ -42,8 +42,9 @@ class APICall():
         return 'https://codeforces.com/api/' + self.call
 
 # Usage:
-# call = APICall('contest.status', True)
-# call.add('contestId', 364369)
+# call = APICall('contest.status', auth=True)
+# call.add('contestId', 566)
 # call.add('from', 1)
 # call.add('count', 10)
 # print(call.get_url())
+# check https://codeforces.com/apiHelp for all methods
