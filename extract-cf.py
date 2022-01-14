@@ -202,17 +202,18 @@ for (pcode, pname) in problems:
 ### Teams:
 for teamId, teamData in teams.items():
     teamName, members = teamData
+    fullTeamName = teamName + ' (' + ', '.join(members) + ')'
 
     t = xadd(contest_feed, 'team')
     xadd(t, 'id', teamId)
-    xadd(t, 'name', teamName)
+    xadd(t, 'name', fullTeamName)
     xadd(t, 'nationality', 'India')
     xadd(t, 'university', 'IIIT Hyderabad')
     xadd(t, 'university-short-name', 'IIITH')
     # xadd(t, 'region', config.regions[0])
 
     ### TODO: figure out where to add member info
-    # xadd(t, 'display_name', teamName + ' (' + ', '.join(members) + ')')
+    # xadd(t, 'display_name', fullTeamName)
 
 ### Submission data:
 submission_ignore_count = 0
