@@ -114,8 +114,8 @@ def extract_submission_data():
 # GLOBAL
 raw_submissions = extract_submission_data()
 
-raw_submissions = filter(lambda s: s['author']['participantType'] == 'CONTESTANT',
-                         raw_submissions)
+raw_submissions = list(filter(lambda s: s['author']['participantType'] == 'CONTESTANT',
+                         raw_submissions))
 
 ##############################################################################
 ### Extract teams list                                                    ####
@@ -206,9 +206,10 @@ for teamId, teamData in teams.items():
     ### TODO: figure out where to add member info
 
 ### Submission data:
+submission_ignore_count = 0
 for sub in raw_submissions:
     if 'verdict' not in sub or sub['verdict'] == 'COMPILATION_ERROR':
-        print('ignoring', sub)
+        submission_ignore_count += 1
         continue
 
     s = xadd(contest_feed, 'run')
@@ -226,6 +227,9 @@ for sub in raw_submissions:
 
     xadd(s, 'time', sub['relativeTimeSeconds'])
     xadd(s, 'timestamp', sub['creationTimeSeconds'])
+
+print('Total number of submissions:', len(raw_submissions))
+print('> Submissions ignored', submission_ignore_count)
 
 ### Finalize!
 (gold, silver, bronze) = config.medal_counts(len(teams))
