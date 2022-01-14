@@ -17,11 +17,11 @@ Usage
 
 1. Copy `config-example.py` to `config.py` and set the parameters in it.
 1. Run `python3 extract-cf.py <status_file>.json <standings_file>.json <output>.xml`
-  - `<status_file>.json`: File to take submission info from (will fetch using API if not found)
-  - `<standings_file>.json`: File to take contest info from (will fetch using API if not found)
-  - `<output>.xml`: File to write the contest feed to.
+    - `<status_file>.json`: File to take submission info from (will fetch using API if not found)
+    - `<standings_file>.json`: File to take contest info from (will fetch using API if not found)
+    - `<output>.xml`: File to write the contest feed to.
 1. Run the resolver with `/path/to/resolver.sh output.xml`
-1. (optinal) To validate, run `/path/to/eventFeed.sh --validate output.xml`.
+1. (optional) To validate, run `/path/to/eventFeed.sh --validate output.xml`.
 1. (optional) To edit the awards manually, run `/path/to/awards.sh`. Select "Disk" and load the generated `output.xml` file.
 
 
