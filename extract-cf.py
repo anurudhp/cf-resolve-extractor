@@ -3,14 +3,29 @@ import sys
 import os.path
 import argparse
 import sh
-import time
+import time, datetime
 import xml.etree.ElementTree as ET
 
 import config
 from cfapi import APICall
 
+##############################################################################
+### Helpers                                                               ####
+##############################################################################
+def epochToISO(s):
+    return datetime.datetime.fromtimestamp(s).isoformat(timespec='milliseconds') + '+00'
+
+def secondsToHHMMSS(s):
+    res = str(datetime.timedelta(seconds = int(s))) + '.000'
+    if res[1] == ':':
+        res = '0' + res
+    return res
+
+##############################################################################
+### Input                                                                 ####
+##############################################################################
 if len(sys.argv) < 4:
-    print(f'Usage: python3 {sys.argv[0]} <status>.json <standings>.json <output>.xml')
+    print(f'Usage: python3 {sys.argv[0]} <status>.json <standings>.json <output>.json')
     sys.exit(1)
 
 # GLOBAL
@@ -55,7 +70,7 @@ def extract_problem_data():
 
     contest_details = data['contest']
     length = data['contest']['durationSeconds']
-    contest_details['length'] = '%02d:%02d:%02d' % (length//3600, (length/60)%60, length%60)
+    contest_details['length'] = '%02d:%02d:%02d.000' % (length//3600, (length/60)%60, length%60)
 
     problems = [] # list of (problem_code, problem_name)
     problem_ids = dict() # problem_code -> index+1
@@ -155,105 +170,151 @@ teams = extract_team_list()
 ### Spec: https://clics.ecs.baylor.edu/index.php?title=Event_Feed_2016    ####
 ##############################################################################
 
-contest_feed = ET.Element('contest')
+_unique_event_index = 0
+def create_event(typ, data, op):
+    global _unique_event_index
+    _unique_event_index += 1
+    return {
+        'type': typ,
+        'id': f'icpc_event_{_unique_event_index}',
+        'op': op,
+        'data': data
+    }
 
-def xadd(parent, child_name, child_text = None):
-    child = ET.SubElement(parent, child_name)
-    if child_text is not None:
-        child.text = str(child_text)
-    return child
+contest_events = []
+def add_event(typ, data, op='create'):
+    ev = create_event(typ, data, op)
+    ev = json.dumps(ev)
+    contest_events.append(ev)
+    return ev
+
+### Contest state update event
+def show_contest_state(ended=False, done=False):
+    tstart = contest_details['startTimeSeconds']
+    tfin = tstart + contest_details['durationSeconds']
+    tfrozen = tfin - config.freeze_duration
+    tthaw = tfin + 300
+    tdone = int(time.time())
+
+    data = {
+        'started': tstart,
+        'ended': tfin if ended or done else None,
+        'frozen': tfrozen,
+        'thawed': tthaw,
+        'finalized': tdone if done else None,
+        'end_of_updates': tdone + 60 if done else None
+    }
+    for k in data.keys():
+        if data[k] is not None:
+            data[k] = epochToISO(data[k])
+
+    if '_contest_state_shown' not in globals():
+        global _contest_state_shown
+        _contest_state_shown = False
+
+    add_event('state', data, 'update' if _contest_state_shown else 'create')
+    _contest_state_shown = True
 
 ### Info
-contest_info = xadd(contest_feed, 'info')
-xadd(contest_info, 'contest-id', '100')
-xadd(contest_info, 'length', contest_details['length'])
-xadd(contest_info, 'scoreboard-freeze-length', '01:00:00')
-xadd(contest_info, 'penalty', '20')
-xadd(contest_info, 'started', 'True')
-xadd(contest_info, 'starttime', contest_details['startTimeSeconds'])
-xadd(contest_info, 'title', contest_details['name'])
-xadd(contest_info, 'short-title', contest_details['name'])
+add_event('contests', {
+    'id': '100',
+    "name": contest_details['name'],
+    "formal_name": contest_details['name'],
+    "start_time": epochToISO(contest_details['startTimeSeconds']),
+    "duration": contest_details['length'],
+    "scoreboard_freeze_duration": secondsToHHMMSS(config.freeze_duration),
+    "penalty_time":20
+})
 
 ### Add only one language, and extract everything to that
-lang = xadd(contest_feed, 'language')
-xadd(lang, 'id', '1')
-xadd(lang, 'name', 'C++')
+add_event("languages", {"id":"1", "name":"C++"})
 
 ### Contest regions - use it to form different contestant prize groups.
 for i, name in enumerate(config.regions):
-    reg = xadd(contest_feed, 'region')
-    xadd(reg, 'external-id', i)
-    xadd(reg, 'name', name)
+    add_event('groups',{"id":str(i),"icpc_id":str(i),"name":name})
 
 ### Possible verdicts: OK, WRONG (subsume everything into WRONG)
 for verdict in ['OK', 'WRONG']:
-    j = xadd(contest_feed, 'judgement')
-    xadd(j, 'acronym', verdict)
-    xadd(j, 'name', verdict)
+    ok = verdict == 'OK'
+    add_event('judgement-types', {
+        "id": verdict,
+        "name": verdict,
+        "penalty": not ok,
+        "solved": ok
+    })
 
 ### Problems:
 for (pcode, pname) in problems:
-    p = xadd(contest_feed, 'problem')
-    xadd(p, 'id', problem_ids[pcode])
-    xadd(p, 'label', pcode)
-    xadd(p, 'name', pname)
-    xadd(p, 'test_data_count', 1) # to suppress warnings
+    add_event('problems', {
+        "id": pcode,
+        "label": pcode,
+        "name": pname,
+        "ordinal":problem_ids[pcode] - 1,
+        "test_data_count": 1
+    })
+
+### Organizations
+### TODO: add support for multiple orgs
+add_event('organizations',{
+    "id":"org_default",
+    "icpc_id": None,
+    "name": "Default",
+    "formal_name":"Default",
+    "country":"India"
+})
 
 ### Teams:
 for teamId, teamData in teams.items():
     teamName, members = teamData
     fullTeamName = teamName + ' (' + ', '.join(members) + ')'
+    region = config.get_region(teamId, teamName, members)
+    region = config.regions.index(region)
 
-    t = xadd(contest_feed, 'team')
-    xadd(t, 'id', teamId)
-    xadd(t, 'name', fullTeamName)
-    xadd(t, 'nationality', 'India')
-    xadd(t, 'university', 'IIIT Hyderabad')
-    xadd(t, 'university-short-name', 'IIITH')
-    xadd(t, 'region', config.get_region(teamId, teamName, members))
+    add_event('teams', {
+        "id": teamId,
+        "name": fullTeamName,
+        "group_ids":[str(region)],
+        "organization_id": "org_default"
+    })
 
-    ### TODO: figure out where to add member info
-    # xadd(t, 'display_name', fullTeamName)
 
 ### Submission data:
+show_contest_state() # start the contest
+
 submission_ignore_count = 0
 for sub in raw_submissions:
     if 'verdict' not in sub or sub['verdict'] == 'COMPILATION_ERROR':
         submission_ignore_count += 1
         continue
 
-    s = xadd(contest_feed, 'run')
-
-    xadd(s, 'id', sub['id'])
-    xadd(s, 'team', sub['author']['teamId'])
-    xadd(s, 'judged', True)
-    xadd(s, 'language', 'C++')
-    xadd(s, 'problem', problem_ids[sub['problem']['index']])
-
+    sub_id = str(sub['id'])
     verdict = 'OK' if sub['verdict'] == 'OK' else 'WRONG'
-    xadd(s, 'result', verdict)
-    xadd(s, 'solved', verdict == 'OK')
-    xadd(s, 'penalty', verdict != 'OK')
+    timestamp = epochToISO(sub['creationTimeSeconds'])
+    reltime = secondsToHHMMSS(sub['relativeTimeSeconds'])
 
-    xadd(s, 'time', sub['relativeTimeSeconds'])
-    xadd(s, 'timestamp', sub['creationTimeSeconds'])
+    add_event('submissions', {
+        'id': sub_id,
+        "problem_id": sub['problem']['index'],
+        "team_id": str(sub['author']['teamId']),
+        "language_id": "1",
+        "files": [],
+        "contest_time":reltime,
+        "time":timestamp
+    })
+    add_event('judgements', {
+        'id': sub_id,
+        "submission_id": sub_id,
+        "judgement_type_id": verdict,
+        "start_contest_time":reltime,
+        "end_contest_time":reltime,
+        "start_time":timestamp,
+        "end_time":timestamp
+    })
 
 print('Total number of submissions:', len(raw_submissions))
 print('> Submissions ignored', submission_ignore_count)
 
-### Finalize!
-(gold, silver, bronze) = config.medal_counts(len(teams))
-
-finalized = xadd(contest_feed, 'finalized')
-xadd(finalized, 'timestamp', time.time())
-xadd(finalized, 'last-gold', gold)
-xadd(finalized, 'last-silver', gold + silver)
-xadd(finalized, 'last-bronze', gold + silver + bronze)
-
-ET.indent(contest_feed)
-ET.ElementTree(contest_feed).write(output_file)
-
-print(f'Contest {config.contest_id} feed generated! Wrote to {output_file}')
+show_contest_state(done=True) # end the contest
 
 ### Generate UG1 data, used to extract first solved info.
 '''sample format
@@ -290,22 +351,18 @@ def generateUG1Awards():
             firstSolveTime[prob] = subtime
             firstSolves[prob].append(team)
 
-    lines = []
     for prob, teams in firstSolves.items():
-        data = {
-            'type': 'awards',
-            'id': f'ug1_aux_award_{prob}',
-            'op': 'create',
-            'data': {
-                'id': f'ug1_aux_award_{prob}_data',
-                'citation': f'UG1 - First to solve problem {problems[prob-1][0]}',
-                'team_ids': teams
-            }
-        }
-        lines.append(json.dumps(data))
-    lines = '\n'.join(lines)
-    with open('ug1awards.json', 'w') as f:
-        f.write(lines)
-    print(f'[info] wrote {len(firstSolves)} UG1 awards to ug1awards.json')
+        add_event('awards', {
+            'id': f'ug1_aux_award_{prob}_data',
+            'citation': f'UG1 - First to solve problem {problems[prob-1][0]}',
+            'team_ids': teams
+        })
+    print(f'[info] wrote {len(firstSolves)} UG1 awards')
 
 generateUG1Awards()
+
+print('total events:', len(contest_events))
+with open(output_file, 'w') as f:
+    f.write('\n'.join(contest_events))
+    f.write('\n')
+print(f'Contest {config.contest_id} feed generated! Wrote to {output_file}')

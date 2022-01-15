@@ -4,6 +4,9 @@ secret = 'YOUR CF API SECRET KEY'
 # ID of cf contest
 contest_id = 'CONTEST_ID'
 
+# freeze duration in seconds
+freeze_duration = 60 * 60 # 1 hour
+
 # list of regions/award groups. Each team belongs to at most one region
 regions = []
 
