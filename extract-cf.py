@@ -210,7 +210,7 @@ for teamId, teamData in teams.items():
     xadd(t, 'nationality', 'India')
     xadd(t, 'university', 'IIIT Hyderabad')
     xadd(t, 'university-short-name', 'IIITH')
-    # xadd(t, 'region', config.regions[0])
+    xadd(t, 'region', config.get_region(teamId, teamName, members))
 
     ### TODO: figure out where to add member info
     # xadd(t, 'display_name', fullTeamName)
