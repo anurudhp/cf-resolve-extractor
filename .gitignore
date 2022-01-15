@@ -5,3 +5,4 @@ __pycache__
 *.bak
 logs
 *.csv
+/Makefile
