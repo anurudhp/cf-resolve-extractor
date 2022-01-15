@@ -254,3 +254,58 @@ ET.indent(contest_feed)
 ET.ElementTree(contest_feed).write(output_file)
 
 print(f'Contest {config.contest_id} feed generated! Wrote to {output_file}')
+
+### Generate UG1 data, used to extract first solved info.
+'''sample format
+{
+    "type":"awards",
+    "id":"icpc417",
+    "op":"create",
+    "data": {
+        "id":"id-0.42676245053009976",
+        "citation":"UG1: First to solve A",
+        "team_ids":["86480"]
+    }
+}
+'''
+def generateUG1Awards():
+    firstSolves = dict()
+    firstSolveTime = dict()
+
+    for sub in raw_submissions:
+        if 'verdict' not in sub or sub['verdict'] != 'OK':
+            continue
+        team = str(sub['author']['teamId'])
+        if str(team) not in config.ug1teams:
+            continue
+        prob = problem_ids[sub['problem']['index']]
+        subtime = int(sub['relativeTimeSeconds'])
+
+        if prob not in firstSolveTime:
+            firstSolveTime[prob] = subtime
+            firstSolves[prob] = []
+        if firstSolveTime[prob] > subtime:
+            firstSolves[prob] = []
+        if firstSolveTime[prob] >= subtime:
+            firstSolveTime[prob] = subtime
+            firstSolves[prob].append(team)
+
+    lines = []
+    for prob, teams in firstSolves.items():
+        data = {
+            'type': 'awards',
+            'id': f'ug1_aux_award_{prob}',
+            'op': 'create',
+            'data': {
+                'id': f'ug1_aux_award_{prob}_data',
+                'citation': f'UG1 - First to solve problem {problems[prob-1][0]}',
+                'team_ids': teams
+            }
+        }
+        lines.append(json.dumps(data))
+    lines = '\n'.join(lines)
+    with open('ug1awards.json', 'w') as f:
+        f.write(lines)
+    print(f'[info] wrote {len(firstSolves)} UG1 awards to ug1awards.json')
+
+generateUG1Awards()
