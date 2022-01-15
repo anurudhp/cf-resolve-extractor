@@ -3,6 +3,9 @@ import string
 import time
 import hashlib
 
+import logging
+logging.basicConfig(format='[%(levelname)s]: %(message)s', level=logging.DEBUG)
+
 import config
 
 class APICall():

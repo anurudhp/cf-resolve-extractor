@@ -1,13 +1,14 @@
-import json
-import sys
-import os.path
-import argparse
-import sh
+import sys, os.path, argparse
 import time, datetime
+import json
+import sh
 import xml.etree.ElementTree as ET
 
 import config
 from cfapi import APICall
+
+import logging
+logging.basicConfig(format='[%(levelname)s]: %(message)s', level=logging.DEBUG)
 
 ##############################################################################
 ### Helpers                                                               ####
@@ -38,7 +39,7 @@ output_file = sys.argv[3]
 ##############################################################################
 
 if not os.path.isfile(status_file):
-    print('Fetching status...', end='', flush=True)
+    logging.info(f'Fetching status for {config.contest_id}...')
     call = APICall('contest.status', True)
     call.add('contestId', config.contest_id)
     call.add('from', 1)
@@ -46,10 +47,10 @@ if not os.path.isfile(status_file):
     url = call.get_url()
     time.sleep(1)
     sh.wget(url, '-O', status_file)
-    print('Done!')
+    logging.info(f'Status fetched!')
 
 if not os.path.isfile(standings_file):
-    print('Fetching standings...', end='', flush=True)
+    logging.info(f'Fetching standings for {config.contest_id}...')
     call = APICall('contest.standings', True)
     call.add('contestId', config.contest_id)
     call.add('from', 1)
@@ -57,7 +58,7 @@ if not os.path.isfile(standings_file):
     url = call.get_url()
     time.sleep(1)
     sh.wget(url, '-O', standings_file)
-    print('Done!')
+    logging.info(f'Standings fetched!')
 
 ##############################################################################
 ### Extract CF contest problem list                                       ####
@@ -92,7 +93,7 @@ contest_details, problems, problem_ids = extract_problem_data()
 def extract_submission_data():
     data = json.load(open(status_file))
     if data['status'] != 'OK':
-        print(data)
+        logging.error('submission data not fetched')
         sys.exit(1)
     data = data['result'] # list of submissions
     return data
@@ -311,8 +312,8 @@ for sub in raw_submissions:
         "end_time":timestamp
     })
 
-print('Total number of submissions:', len(raw_submissions))
-print('> Submissions ignored', submission_ignore_count)
+logging.info(f'Total number of submissions: {len(raw_submissions)}')
+logging.info(f'Submissions ignored {submission_ignore_count}')
 
 show_contest_state(done=True) # end the contest
 
@@ -357,12 +358,12 @@ def generateUG1Awards():
             'citation': f'UG1 - First to solve problem {problems[prob-1][0]}',
             'team_ids': teams
         })
-    print(f'[info] wrote {len(firstSolves)} UG1 awards')
+    logging.info(f'wrote {len(firstSolves)} UG1 awards')
 
 generateUG1Awards()
 
-print('total events:', len(contest_events))
+logging.info(f'total events: {len(contest_events)}')
 with open(output_file, 'w') as f:
     f.write('\n'.join(contest_events))
     f.write('\n')
-print(f'Contest {config.contest_id} feed generated! Wrote to {output_file}')
+logging.info(f'Contest {config.contest_id} feed generated! Wrote to {output_file}')
